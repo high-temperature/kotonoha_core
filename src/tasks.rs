@@ -48,9 +48,9 @@ pub async fn add_task(title: &str) {
         done: false,
     });
     save_tasks(&tasks);
-    println!("タスクを追加しました: {}",title);
 
-    let response = format!("タスクを「{}」を追加しました。", title);
+    println!("Kotonoha > タスク「{}」を登録しました。", title);
+    let response = format!("タスクを「{}」を登録しました。", title);
     let _ = tts::speak(&response).await;
 }
 pub async fn list_tasks() {

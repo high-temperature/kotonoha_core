@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
-    let mut messages = vec![];
+    let _messages:Vec<ChatMessage> = vec![];
 
     // Kotonohaが定期的にしゃべる
     tokio::spawn(async {
@@ -33,23 +33,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut user_input = String::new();
         io::stdin().read_line(&mut user_input)?;
         let user_input = user_input.trim();
-
+    
         if user_input == "exit" {
             break;
         }
-
-        // ✅ タスクコマンドの処理
+    
+        // ✅ 手動コマンド処理
         if user_input.starts_with("todo ") {
             let task = user_input.strip_prefix("todo ").unwrap();
             tasks::add_task(task).await;
             continue;
         }
-
+    
         if user_input == "list" {
             tasks::list_tasks().await;
             continue;
         }
-
+    
         if user_input.starts_with("done ") {
             if let Ok(id) = user_input.strip_prefix("done ").unwrap().parse::<u32>() {
                 tasks::mark_done(id).await;
@@ -58,43 +58,101 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             continue;
         }
-
-        // 💬 ChatGPT に送信
-        messages.push(ChatMessage {
-            role: "user".into(),
-            content: user_input.to_string(),
-        });
-
-        let request_body = ChatRequest {
+    
+        // 🧠 雑談 or タスク分類
+        let classification_prompt = format!(
+            "以下の文章はユーザからの入力です。この文章が「やるべきこと（ToDo）」に関する指示なら「タスク」、そうでなく会話や質問なら「雑談」とだけ返答してください。\n\n文章：{}",
+            user_input
+        );
+    
+        let classification_request = ChatRequest {
             model: "gpt-3.5-turbo".into(),
-            messages: messages.clone(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: classification_prompt,
+            }],
         };
-
-        let response = client
+    
+        let classification_response = client
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(&api_key)
-            .json(&request_body)
+            .json(&classification_request)
             .send()
             .await?;
-
-        let text = response.text().await?;
-        let resp_json: Result<ChatResponse, _> = serde_json::from_str(&text);
-
-        if let Ok(resp) = resp_json {
-            let reply = &resp.choices[0].message.content;
-            println!("Kotonoha > {}", reply);
-
-            // 🗣 TTSで返答を再生
-            tts::speak(reply).await?;
-
-            messages.push(ChatMessage {
-                role: "assistant".into(),
-                content: reply.clone(),
-            });
-        } else {
-            println!("❌ エラー応答: {}", text);
+    
+        let classification_text = classification_response.text().await?;
+        let classification_resp: ChatResponse = serde_json::from_str(&classification_text)?;
+    
+        let mode = classification_resp.choices[0].message.content.trim().to_lowercase();
+    
+        match mode.as_str() {
+            "タスク" => {
+                // ✨ タスク抽出プロンプトを使って再送信
+                let extraction_prompt = format!(
+                    "以下の文から、やるべきタスクがあればタイトルだけを抽出してください。\n文:{}",
+                    user_input
+                );
+    
+                let task_request = ChatRequest {
+                    model: "gpt-3.5-turbo".into(),
+                    messages: vec![ChatMessage {
+                        role: "user".into(),
+                        content: extraction_prompt,
+                    }],
+                };
+    
+                let task_response = client
+                    .post("https://api.openai.com/v1/chat/completions")
+                    .bearer_auth(&api_key)
+                    .json(&task_request)
+                    .send()
+                    .await?;
+    
+                let task_text = task_response.text().await?;
+                let task_result: ChatResponse = serde_json::from_str(&task_text)?;
+                let reply = task_result.choices[0].message.content.trim().to_string();
+    
+                if reply.is_empty() || reply == "なし" {
+                    println!("Kotonoha > タスクは見つかりませんでした。");
+                    tts::speak("タスクは見つかりませんでした。").await?;
+                } else {
+                    tasks::add_task(&reply).await;
+                }
+            }
+    
+            "雑談" => {
+                // 通常の雑談モードで返答
+                let chat_request = ChatRequest {
+                    model: "gpt-3.5-turbo".into(),
+                    messages: vec![ChatMessage {
+                        role: "user".into(),
+                        content: user_input.to_string(),
+                    }],
+                };
+    
+                let chat_response = client
+                    .post("https://api.openai.com/v1/chat/completions")
+                    .bearer_auth(&api_key)
+                    .json(&chat_request)
+                    .send()
+                    .await?;
+    
+                let chat_text = chat_response.text().await?;
+                let chat_result: ChatResponse = serde_json::from_str(&chat_text)?;
+                let reply = chat_result.choices[0].message.content.trim();
+    
+                println!("Kotonoha > {}", reply);
+                tts::speak(reply).await?;
+            }
+    
+            _ => {
+                // 失敗時のフォールバック
+                println!("Kotonoha > ごめんなさい、分類に失敗しました。");
+                tts::speak("ごめんなさい、よくわかりませんでした。").await?;
+            }
         }
     }
+    
 
     Ok(())
 }
