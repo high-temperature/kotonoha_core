@@ -53,25 +53,35 @@ pub async fn add_task(title: &str) {
     let response = format!("タスクを「{}」を追加しました。", title);
     let _ = tts::speak(&response).await;
 }
-pub async fn list_tasks(){
+pub async fn list_tasks() {
     let tasks = load_tasks();
-    if tasks.is_empty(){
-        println!("登録されたタスクはありません。");
-        let _ = tts::speak("現在のタスクはすべて完了しています。").await;
-    }else{
-        println!("現在のタスク一覧:");
-        let mut spoken = format!("現在のタスクは {} 件あります。", tasks.len());
-        for task in tasks{
-            println!("{}: {} [{}]", task.id, task.title, if task.done { "✅"} else { "　" });
-            if !task.done {
-                spoken.push_str(&format!("{}: {}。", task.id, task.title));
-            }
 
+    if tasks.is_empty() {
+        println!("📋 登録されたタスクはありません。");
+        let _ = crate::tts::speak("現在のタスクはすべて完了しています。").await;
+    } else {
+        println!("📋 現在のタスク一覧:");
+        let mut spoken = format!("現在のタスクは {} 件あります。", tasks.len());
+
+        for (i, task) in tasks.iter().enumerate() {
+            println!(
+                "{}: {} [{}]",
+                task.id,
+                task.title,
+                if task.done { "✅" } else { "　" }
+            );
+
+            // ✅ タスクが未完了なら読み上げ内容に追加
+            if !task.done {
+                spoken.push_str(&format!(" {}つ目、{}。", i + 1, task.title));
+            }
         }
-        let _ = tts::speak(&spoken).await;
+
+        // 🗣 声で読み上げる
+        let _ = crate::tts::speak(&spoken).await;
     }
-    
 }
+
 
 pub async fn mark_done(task_id:u32){
     let mut tasks = load_tasks();

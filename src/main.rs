@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let mut messages = vec![];
 
-    println!("Kotonohaとお話ししましょう。終了したいときは 'exit' と入力してください。");
+    kotonoha_greeting().await?;
 
     loop {
         print!("あなた > ");
@@ -85,6 +85,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    Ok(())
+}
+
+// Kotonoha が起動時に挨拶をしてタスクを確認する
+async fn kotonoha_greeting() -> Result<(), Box<dyn std::error::Error>> {
+    let tasks = tasks::load_tasks();
+    let pending_count = tasks.iter().filter(|task| !task.done).count();
+
+    let greeting_message = if pending_count == 0 {
+        "おはようございます。現在登録されているすべてのタスクが完了しています。".to_string()
+    } else {
+        format!("おはようございます。現在 {} 件のタスクがあります。", pending_count)
+    };
+
+    tts::speak(&greeting_message).await?;
+        
     Ok(())
 }
 
