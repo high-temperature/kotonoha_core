@@ -19,6 +19,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         kotonoha::timer().await;
     });
 
+    let task_file = env::var("TASK_FILE").unwrap_or_else(|_| "tasks.json".to_string());
+    tasks::set_task_file(&task_file);
 
     kotonoha::greeting().await?;
 

@@ -4,6 +4,17 @@ use crate::models::Task;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader,BufWriter};
 use std::path::Path;
+use std::sync::OnceLock;
+
+static TASK_FILE: OnceLock<String> = OnceLock::new();
+
+pub fn set_task_file(file: &str) {
+    let _ = TASK_FILE.set(file.to_string());
+}
+
+fn get_task_file() ->&'static str {
+    TASK_FILE.get().map(|s| s.as_str()).unwrap_or("tasks.json")
+}
 
 pub fn load_tasks_with_file(file:&str)->Vec<Task>{
     if !Path::new(file).exists() {
@@ -26,30 +37,15 @@ pub fn save_tasks_with_file(file:&str,tasks:&[Task]){
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, tasks).expect("Failed to write tasks to file");
 }
-  
-const TASK_FILE: &str = "tasks.json";
 
 pub fn load_tasks() -> Vec<Task> {
-    if !Path::new(TASK_FILE).exists() {
-        return vec![];
-    }
-
-    let file = File::open(TASK_FILE).expect("Failed to open tasks file");
-    let reader = BufReader::new(file);
-    serde_json::from_reader(reader).unwrap_or_else(|_| vec![])
-
+    let file = get_task_file();
+    load_tasks_with_file(file)
 }
 
 pub fn save_tasks(tasks: &[Task]){
-    let file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(TASK_FILE)
-        .expect("Failed to open tasks file for writing");
-
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, tasks).expect("Failed to write tasks to file");
+    let file = get_task_file();
+    save_tasks_with_file(file, tasks);
 }
 
 pub async fn add_task(title: &str) {

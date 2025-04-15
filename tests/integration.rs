@@ -32,3 +32,30 @@ fn test_add_and_mark_task_flow() {
     std::fs::remove_file(TEST_FILE).ok();
 
 }
+
+
+#[test]
+fn test_multiple_tasks_add_and_check() {
+    let test_file = "tasks_test_multi.json";
+    let _ = std::fs::remove_file(test_file);
+
+    let tasks = vec![
+        Task { id: 1, title: "一つ目".to_string(), done: false },
+        Task { id: 2, title: "二つ目".to_string(), done: false },
+        Task { id: 3, title: "三つ目".to_string(), done: true },
+    ];
+    tasks::save_tasks_with_file(test_file, &tasks);
+
+    let loaded = tasks::load_tasks_with_file(test_file);
+    assert_eq!(loaded.len(), 3);
+    assert_eq!(loaded[0].title, "一つ目");
+    assert!(loaded[2].done);
+
+    // 未完了タスクだけを確認
+    let pending: Vec<&Task> = loaded.iter().filter(|t| !t.done).collect();
+    assert_eq!(pending.len(), 2);
+    assert_eq!(pending[0].title, "一つ目");
+    assert_eq!(pending[1].title, "二つ目");
+
+    std::fs::remove_file(test_file).ok();
+}

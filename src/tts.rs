@@ -4,13 +4,15 @@ use reqwest::Client;
 use rodio::{Decoder, OutputStream, Sink};
 use std::io::Cursor;
 
+const KASUKABE_TSUMUGI_ID: &str = "8"; // 春日部つむぎのID
+
 pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
 
     // クエリを作成（音声合成準備）
     let query = client
         .post("http://127.0.0.1:50021/audio_query")
-        .query(&[("text", text), ("speaker", "8")]) // speaker 8 = 春日部つむぎ
+        .query(&[("text", text), ("speaker", KASUKABE_TSUMUGI_ID)]) // speaker 8 = 春日部つむぎ
         .send()
         .await?
         .text()
@@ -19,7 +21,7 @@ pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 音声合成（合成されたWAV）
     let audio = client
         .post("http://127.0.0.1:50021/synthesis")
-        .query(&[("speaker", "8")]) // speaker 8 = 春日部つむぎ
+        .query(&[("speaker", KASUKABE_TSUMUGI_ID)]) // speaker 8 = 春日部つむぎ
         .header("Content-Type", "application/json")
         .body(query)
         .send()
