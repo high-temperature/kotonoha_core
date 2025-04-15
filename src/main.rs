@@ -1,11 +1,15 @@
 ﻿mod tasks;
 mod tts;
 
+
 use dotenvy::dotenv;
 use std::env;
 use std::io::{self, Write};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+
+use tokio::time::{sleep, Duration};
+use chrono::Local;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +18,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let mut messages = vec![];
 
+    // Kotonohaが定期的にしゃべる
+    tokio::spawn(async {
+        kotonoha_timer().await;
+    });
+
+
     kotonoha_greeting().await?;
+
 
     loop {
         print!("あなた > ");
@@ -102,6 +113,19 @@ async fn kotonoha_greeting() -> Result<(), Box<dyn std::error::Error>> {
     tts::speak(&greeting_message).await?;
         
     Ok(())
+}
+
+//Kotonohaが定期的にしゃべる
+async fn kotonoha_timer(){
+    loop{
+        sleep(Duration::from_secs(300)).await;
+
+        let now = Local::now();
+        let time_str = now.format("%H時%M分").to_string();
+        let timer_message = format!("ただいま、{}です。姿勢を正して頑張りましょう。", time_str);
+
+        let _ = tts::speak(&timer_message).await;
+    }
 }
 
 #[derive(Serialize, Clone)]
