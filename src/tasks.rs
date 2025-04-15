@@ -1,20 +1,33 @@
 use crate::tts;
-use serde::{Serialize, Deserialize};
-use std::fs::{
-    File,
-    OpenOptions,
-};
+use crate::models::Task;
+
+use std::fs::{File, OpenOptions};
 use std::io::{BufReader,BufWriter};
 use std::path::Path;
 
-const TASK_FILE: &str = "tasks.json";
+pub fn load_tasks_with_file(file:&str)->Vec<Task>{
+    if !Path::new(file).exists() {
+        return vec![];
+    }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Task {
-    pub id: u32,
-    pub title: String,
-    pub done: bool,
-}   
+    let file = File::open(file).expect("Failed to open tasks file");
+    let reader = BufReader::new(file);
+    serde_json::from_reader(reader).unwrap_or_else(|_| vec![])
+
+}
+pub fn save_tasks_with_file(file:&str,tasks:&[Task]){
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(file)
+        .expect("Failed to open tasks file for writing");
+
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, tasks).expect("Failed to write tasks to file");
+}
+  
+const TASK_FILE: &str = "tasks.json";
 
 pub fn load_tasks() -> Vec<Task> {
     if !Path::new(TASK_FILE).exists() {
@@ -100,4 +113,60 @@ pub async fn mark_done(task_id:u32){
     }
     save_tasks(&tasks);
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_FILE_ADD: &str = "tasks_test_add.json";
+    const TEST_FILE_DONE: &str = "tasks_test_done.json";
+    
+    #[test]
+    fn test_add_and_load_tasks() {
+        let _ = std::fs::remove_file(TEST_FILE_ADD);
+    
+        let mut tasks = load_tasks_with_file(TEST_FILE_ADD);
+        tasks.push(Task {
+            id: 1,
+            title: "テストタスク".to_string(),
+            done: false,
+        });
+        save_tasks_with_file(TEST_FILE_ADD, &tasks);
+    
+        let loaded = load_tasks_with_file(TEST_FILE_ADD);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].title, "テストタスク");
+        assert!(!loaded[0].done);
+    }
+    
+
+    #[test]
+fn test_mark_done_updates_task() {
+    let _ = std::fs::remove_file(TEST_FILE_DONE);
+
+    let tasks = vec![Task {
+        id: 1,
+        title: "完了チェック".to_string(),
+        done: false,
+    }];
+    save_tasks_with_file(TEST_FILE_DONE, &tasks);
+
+    let mut loaded = load_tasks_with_file(TEST_FILE_DONE);
+    if let Some(task) = loaded.iter_mut().find(|t| t.id == 1) {
+        task.done = true;
+    } else {
+        panic!("タスクが見つかりませんでした");
+    }
+    save_tasks_with_file(TEST_FILE_DONE, &loaded);
+
+    let updated = load_tasks_with_file(TEST_FILE_DONE);
+    let updated_task = updated
+        .iter()
+        .find(|t| t.id == 1)
+        .expect("更新後のタスクが見つかりません");
+    assert!(updated_task.done);
+}
+
+    
 }

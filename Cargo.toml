@@ -1,7 +1,12 @@
 ﻿[package]
 name = "kotonoha_core"
+authors = ["high-temperature"]
 version = "0.1.0"
 edition = "2024"
+
+[lib]
+name = "kotonoha_core"
+path = "src/lib.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
