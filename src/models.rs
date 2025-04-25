@@ -28,3 +28,27 @@ pub struct Task {
     pub title: String,
     pub done: bool,
 } 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_response_deserialization() {
+        let json = r#"
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "こんにちは"
+                    }
+                }
+            ]
+        }
+        "#;
+
+        let parsed: ChatResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.choices[0].message.content, "こんにちは");
+    }
+}

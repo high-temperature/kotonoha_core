@@ -2,6 +2,8 @@ use std::process::{Command, Stdio};
 use std::io::Write;
 use std::fs;
 
+
+
 #[test]
 fn test_cli_add_and_complete_task() {
     let task_file = "tasks_test_cli.json";
@@ -9,10 +11,12 @@ fn test_cli_add_and_complete_task() {
 
     let mut child = Command::new("target/debug/kotonoha_core")
         .env("TASK_FILE", task_file)
+        .env("MOCK_TTS", "1") // TTSをモック化
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .expect("failed to start kotonoha_core");
+
 
     {
         let stdin = child.stdin.as_mut().expect("failed to open stdin");

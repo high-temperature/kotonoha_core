@@ -10,6 +10,7 @@ use reqwest::Client;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
     let _messages:Vec<ChatMessage> = vec![];
