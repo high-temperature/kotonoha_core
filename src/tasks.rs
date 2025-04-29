@@ -111,6 +111,24 @@ pub async fn mark_done(task_id:u32){
 
 }
 
+/// タスク一覧をまとめた文字列を返す
+pub fn summarize_tasks_for_prompt() -> String {
+    let tasks = load_tasks();
+    if tasks.is_empty() {
+        "現在、登録されているタスクはありません。".to_string()
+    } else {
+        let list = tasks
+            .iter()
+            .filter(|t| !t.done)  // 未完了タスクだけ
+            .map(|t| format!("・{}", t.title))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!("現在の未完了タスク一覧:\n{}", list)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,14 +184,15 @@ fn test_mark_done_updates_task() {
 
 #[test]
 fn test_add_multiple_tasks_and_order() {
-    let _ = std::fs::remove_file(TEST_FILE);
+    let file = get_task_file();
+    let _ = std::fs::remove_file(file);
     let mut tasks = vec![];
 
     tasks.push(Task { id: 1, title: "一件目".to_string(), done: false });
     tasks.push(Task { id: 2, title: "二件目".to_string(), done: false });
 
-    save_tasks_with_file(TEST_FILE, &tasks);
-    let loaded = load_tasks_with_file(TEST_FILE);
+    save_tasks_with_file(file, &tasks);
+    let loaded = load_tasks_with_file(file);
 
     assert_eq!(loaded.len(), 2);
     assert_eq!(loaded[0].title, "一件目");

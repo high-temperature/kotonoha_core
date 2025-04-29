@@ -1,5 +1,6 @@
+use crate::models::Task;
+use crate::models::ChatMessage;
 use crate::tts;
-use crate::tasks;
 use chrono::Local;
 use tokio::time::{sleep, Duration};
 use std::error::Error;
@@ -14,10 +15,16 @@ pub fn make_greeting_message(tasks: &[Task]) -> String {
     }
 }
 
-pub async fn greeting() -> Result<(), Box<dyn Error>> {
+pub async fn greeting(messages:&mut Vec<ChatMessage>) -> Result<(), Box<dyn Error>> {
     let tasks = crate::tasks::load_tasks();
-    let msg = make_greeting_message(&tasks);
-    crate::tts::speak(&msg).await?;
+    let greeting_text = make_greeting_message(&tasks);
+    crate::tts::speak(&greeting_text).await?;
+
+    messages.push(ChatMessage {
+        role: "assistant".into(),
+        content: greeting_text,
+    });
+
     Ok(())
 }
 

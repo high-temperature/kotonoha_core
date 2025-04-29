@@ -1,5 +1,6 @@
 ﻿use kotonoha_core::*;
 use tts;
+use chat;
 use models::ChatMessage;
 
 use dotenvy::dotenv;
@@ -18,7 +19,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
-    let _messages:Vec<ChatMessage> = vec![];
 
     // Kotonohaが定期的にしゃべる
     tokio::spawn(async {
@@ -28,7 +28,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let task_file = env::var("TASK_FILE").unwrap_or_else(|_| "tasks.json".to_string());
     tasks::set_task_file(&task_file);
 
-    kotonoha::greeting().await?;
+    let mut messages = vec![
+        ChatMessage {
+            role: "system".into(),
+            content: chat::SYSTEM_PROMPT.into(),
+        },
+        ChatMessage {
+            role: "assistant".into(),
+            content: chat::FIRST_GREETING.into(),
+        }
+    ];
+    
+
+    kotonoha::greeting(&mut messages).await?;
+
 
 
     loop {
@@ -73,10 +86,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tasks::add_task(&task).await;
                 }
             },
-            "雑談" => {
-                let response = chat::respond_to_chat(&client, &api_key, user_input).await?;
-                    println!("Kotonoha > {}", response);
-                    tts::speak(&response).await?;
+            "雑談" => {// タスク情報をサマリーする
+                let task_summary = tasks::summarize_tasks_for_prompt();
+                
+                // ユーザー発言＋タスク情報をまとめたメッセージをpush
+                messages.push(ChatMessage {
+                    role: "user".into(),
+                    content: format!(
+                        "【現在のタスク状況】\n{}\n\n【ユーザー発言】\n{}",
+                        task_summary,
+                        user_input
+                    ),
+                });
+                
+                //  messages全体をChatGPTに渡す
+                let response = chat::respond_to_chat(&client, &api_key, &messages).await?;
+                
+                // Assistantの応答も履歴にpush
+                messages.push(ChatMessage {
+                    role: "assistant".into(),
+                    content: response.clone(),
+                });
+                
+                //  Kotonohaが返事する
+                println!("Kotonoha > {}", response);
+                tts::speak(&response).await?;
+                
             },
             _ => {
             tts::speak("分類に失敗しました。").await?;
