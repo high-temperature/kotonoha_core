@@ -20,25 +20,20 @@ fn test_cli_add_and_complete_task() {
         .expect("failed to start kotonoha_core");
     sleep(Duration::from_millis(1000));
 
-    {
-        let stdin = child.stdin.as_mut().expect("failed to open stdin");
-        // タスク登録だけ先に送る
-        writeln!(stdin, "統合テストタスクをするの覚えておいて").unwrap();
-        
-        // タスク完了指示を送る
-        let _ = sleep(Duration::from_millis(500));
-
-        // exitコマンド送る
-        writeln!(stdin, "exit").unwrap();
+    if let Some(stdin) = child.stdin.as_mut() {
+        writeln!(stdin, "統合テストタスクをするの覚えておいて").expect("failed to write to stdin");
+        writeln!(stdin, "統合テストタスクが完了しました。").expect("failed to write to stdin");
+        writeln!(stdin, "exit").expect("failed to write to stdin");
+    } else {
+        panic!("stdin not available");
     }
-
     let output = child.wait_with_output().expect("failed to read output");
     println!("status: {:?}", output.status);
     println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
     println!("stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     assert!(output.status.success(), "process exited with failure");
-    
+
     // ファイルに保存されているか確認
     let data = fs::read_to_string(task_file).expect("failed to read task file");
     assert!(data.contains("統合テストタスク"));
