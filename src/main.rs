@@ -3,6 +3,8 @@ use tts;
 use chat;
 use models::ChatMessage;
 
+use rand::Rng;
+
 use dotenvy::dotenv;
 use std::env;
 use std::io::{self, Write};
@@ -113,9 +115,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 //  messages全体をChatGPTに渡す
                 let response = chat::respond_to_chat(&client, &api_key, &messages).await?;
                 
-                let encouragement = encourage::random_encouragement();
-                let full_response = format!("{}\n\n {}", response, encouragement);
-            
+                
+                // ランダムで励ましだけ or 励まし＋話題振りを決める
+                let mut rng = rand::rng();
+                let full_response = if rng.random_bool(0.7) {
+                    // 70%は普通に励ましだけ
+                    let encouragement = encourage::random_encouragement();
+                    format!("{}\n\n💬 {}", response, encouragement)
+                } else {
+                    // 30%は励まし＋話題振り
+                    let encouragement = encourage::random_encouragement();
+                    let topic = encourage::random_topic();
+                    format!("{}\n\n💬 {}\n💬 {}", response, encouragement, topic)
+                };
+
+           
                 //  Kotonohaが返事をする
                 println!("Kotonoha > {}", full_response);
                 tts::speak(&full_response).await?;

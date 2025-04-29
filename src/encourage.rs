@@ -12,3 +12,14 @@ pub fn random_encouragement() -> &'static str{
 
     encouragements.choose(&mut rand::rng()).unwrap()
 }
+pub fn random_topic() -> &'static str {
+    let topics = [
+        "ところで、最近ハマっていることはありますか？",
+        "最近見た映画や本でおすすめはありますか？",
+        "お休みの日はどんなふうに過ごされていますか？",
+        "好きな食べ物を教えてください！",
+        "最近チャレンジしたことがあれば、ぜひ聞かせてください！",
+        "今日の天気、いい感じでしたか？"
+    ];
+    topics.choose(&mut rand::rng()).unwrap()
+}
