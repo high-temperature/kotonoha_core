@@ -1,10 +1,14 @@
 use crate::tts;
-use crate::models::Task;
+use crate::models::{Task, TaskStatus, Visibility};
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader,BufWriter};
 use std::path::Path;
 use std::sync::OnceLock;
+
+use serde_json::Map;
+
+use strsim::jaro_winkler;
 
 static TASK_FILE: OnceLock<String> = OnceLock::new();
 
@@ -50,12 +54,23 @@ pub fn save_tasks(tasks: &[Task]){
 
 pub async fn add_task(title: &str) {
     let mut tasks = load_tasks();
-    let new_id = tasks.len() as u32 + 1;
-    tasks.push(Task {
+    let new_id = tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+
+    let new_task = Task {
         id: new_id,
         title: title.to_string(),
         done: false,
-    });
+        due_date: None,
+        priority: None,
+        status: TaskStatus::NotStarted,
+        visibility: Visibility::Visible,
+        notes: None,
+        tags: vec![],
+        subtasks: vec![],
+        extensions: Map::new(),
+    };
+
+    tasks.push(new_task);
     save_tasks(&tasks);
 
     println!("Kotonoha > タスク「{}」を登録しました。", title);
@@ -66,50 +81,142 @@ pub async fn list_tasks() {
     let tasks = load_tasks();
 
     if tasks.is_empty() {
-        println!("📋 登録されたタスクはありません。");
+        println!("登録されたタスクはありません。");
         let _ = crate::tts::speak("現在のタスクはすべて完了しています。").await;
     } else {
-        println!("📋 現在のタスク一覧:");
-        let mut spoken = format!("現在のタスクは {} 件あります。", tasks.len());
+        println!("現在のタスク一覧:");
+        let _spoken = format!("現在のタスクは {} 件あります。", tasks.len());
 
-        for (i, task) in tasks.iter().enumerate() {
-            println!(
-                "{}: {} [{}]",
-                task.id,
-                task.title,
-                if task.done { "✅" } else { "　" }
-            );
+        for task in tasks{
+            display_tasks(&task, 0);
+        }
+    }
+}
 
-            // ✅ タスクが未完了なら読み上げ内容に追加
-            if !task.done {
-                spoken.push_str(&format!(" {}つ目、{}。", i + 1, task.title));
+fn display_tasks(task: &Task, indent: usize) {
+    let prefix = " ".repeat(indent * 2);
+    println!(
+        "{}{}: {} [{}]",
+        prefix,
+        task.id,
+        task.title,
+        if task.done { "✅" } else { "　" }
+    );
+    for subtask in &task.subtasks {
+        display_tasks(subtask, indent + 1);
+    }
+}
+
+pub fn find_task_id_by_similarity(input: &str, threshold: f64) -> Option<u32> {
+    let tasks = load_tasks();
+    let mut best_match = None;
+    let mut best_score = 0.0; // 初期スコアを0.0にする
+
+    println!("🔍 入力: \"{}\"", input);
+
+    for task in &tasks {
+        if let Some((id, score)) = find_best_match(task, input) {
+            println!("📝 タスク \"{}\" のスコア: {:.3}", task.title, score);
+
+            if score > best_score {
+                best_match = Some(id);
+                best_score = score;
             }
         }
+    }
 
-        // 🗣 声で読み上げる
-        let _ = crate::tts::speak(&spoken).await;
+    // 閾値を超えているかチェック
+    if best_score >= threshold {
+        println!("✅ ベストマッチ: タスクID {} (スコア {:.3})", best_match.unwrap(), best_score);
+        best_match
+    } else {
+        println!("❌ 適合するタスクはありません（最高スコア {:.3}）", best_score);
+        None
     }
 }
 
+fn find_best_match(task: &Task, input: &str) -> Option<(u32, f64)> {
+    let score = jaro_winkler(&task.title.to_lowercase(), &input.to_lowercase());
 
-pub async fn mark_done(task_id:u32){
+    if !task.done {
+        return Some((task.id, score));
+    }
+
+    for sub in &task.subtasks {
+        if let Some((id, sub_score)) = find_best_match(sub, input) {
+            return Some((id, sub_score));
+        }
+    }
+
+    None
+}
+
+
+
+
+/// ユーザーの発言から近いタスクタイトルを見つけて、そのIDを返す
+pub fn find_task_id_by_title_fuzzy(input: &str) -> Option<u32> {
+    let tasks = load_tasks();
+
+    // 全部小文字にして一致確認
+    let input_lower = input.to_lowercase();
+
+    for task in &tasks {
+        if task.title.to_lowercase().contains(&input_lower) && !task.done {
+            return Some(task.id);
+        }
+        // サブタスクも再帰的に探す
+        if let Some(id) = find_in_subtasks(&task.subtasks, &input_lower) {
+            return Some(id);
+        }
+    }
+
+    None
+}
+
+fn find_in_subtasks(subtasks: &[Task], input: &str) -> Option<u32> {
+    for task in subtasks {
+        if task.title.to_lowercase().contains(input) && !task.done {
+            return Some(task.id);
+        }
+        if let Some(id) = find_in_subtasks(&task.subtasks, input) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+
+fn mark_task_done(tasks: &mut [Task], task_id: u32) -> bool {
+    for task in tasks {
+        if task.id == task_id {
+            task.done = true;
+            task.status = TaskStatus::Completed;
+            return true;
+        }
+        if mark_task_done(&mut task.subtasks, task_id) {
+            return true;
+        }
+    }
+    false
+}
+
+
+
+pub async fn mark_done(task_id: u32) {
     let mut tasks = load_tasks();
-    if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id){
-        task.done = true;
-        println!("タスク {} を完了にしました。", task.title);
-
-        let response = format!("タスク「{}」を完了にしました。", task.title);
+    if mark_task_done(&mut tasks, task_id) {
+        save_tasks(&tasks);
+        println!("✅ タスク {} を完了にしました。", task_id);
+        let response = format!("タスク {} を完了にしました。", task_id);
         let _ = tts::speak(&response).await;
-    }else{
-        println!("タスク {} は見つかりませんでした。", task_id);
-
+    } else {
+        println!("⚠️ タスク {} が見つかりませんでした。", task_id);
         let response = format!("タスク {} は見つかりませんでした。", task_id);
         let _ = tts::speak(&response).await;
-
     }
-    save_tasks(&tasks);
-
 }
+
 
 /// タスク一覧をまとめた文字列を返す
 pub fn summarize_tasks_for_prompt() -> String {
@@ -145,6 +252,14 @@ mod tests {
             id: 1,
             title: "テストタスク".to_string(),
             done: false,
+            due_date: None,
+            priority: None,
+            status: TaskStatus::NotStarted,
+            visibility: Visibility::Visible,
+            notes: None,
+            tags: vec![],
+            subtasks: vec![],
+            extensions: Map::new(),
         });
         save_tasks_with_file(TEST_FILE_ADD, &tasks);
     
@@ -163,6 +278,14 @@ fn test_mark_done_updates_task() {
         id: 1,
         title: "完了チェック".to_string(),
         done: false,
+        due_date: None,
+        priority: None,
+        status: TaskStatus::NotStarted,
+        visibility: Visibility::Visible,
+        notes: None,
+        tags: vec![],
+        subtasks: vec![],
+        extensions: Map::new(),
     }];
     save_tasks_with_file(TEST_FILE_DONE, &tasks);
 
@@ -183,13 +306,39 @@ fn test_mark_done_updates_task() {
 }
 
 #[test]
+
 fn test_add_multiple_tasks_and_order() {
     let file = get_task_file();
     let _ = std::fs::remove_file(file);
     let mut tasks = vec![];
 
-    tasks.push(Task { id: 1, title: "一件目".to_string(), done: false });
-    tasks.push(Task { id: 2, title: "二件目".to_string(), done: false });
+    tasks.push(Task { 
+        id: 1, 
+        title: "一件目".to_string(), 
+        done: false,
+        due_date: None,
+        priority: None,
+        status: TaskStatus::NotStarted,
+        visibility: Visibility::Visible,
+        notes: None,
+        tags: vec![],
+        subtasks: vec![],
+        extensions: Map::new(),
+    });
+
+    tasks.push(Task { 
+        id: 2, 
+        title: "二件目".to_string(), 
+        done: false,
+        due_date: None,
+        priority: None,
+        status: TaskStatus::NotStarted,
+        visibility: Visibility::Visible,
+        notes: None,
+        tags: vec![],
+        subtasks: vec![],
+        extensions: Map::new(),
+    });
 
     save_tasks_with_file(file, &tasks);
     let loaded = load_tasks_with_file(file);
@@ -199,5 +348,89 @@ fn test_add_multiple_tasks_and_order() {
     assert_eq!(loaded[1].title, "二件目");
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Task, TaskStatus, Visibility};
+    use chrono::NaiveDate;
+
+    fn dummy_task(id: u32, title: &str) -> Task {
+        Task {
+            id,
+            title: title.to_string(),
+            done: false,
+            due_date: None,
+            priority: None,
+            status: TaskStatus::Pending,
+            visibility: Visibility::Normal,
+            notes: None,
+            tags: vec![],
+            subtasks: vec![],
+            extensions: Map::new(),
+        }
+    }
+
+    #[test]
+    fn test_similarity_finds_exact_task() {
+
+        let tasks = vec![
+            dummy_task(1, "週報提出"),
+            dummy_task(2, "資料作成"),
+        ];
+
+        // 上書き保存テスト用
+        save_tasks_with_file("test_similarity.json", &tasks);
+        set_task_file("test_similarity.json");
+
+        let found = find_task_id_by_similarity("週報出したよ", 0.75);
+        assert_eq!(found, Some(1));
+
+        std::fs::remove_file("test_similarity.json").ok();
+    }
+    #[tokio::test]
+    async fn test_similarity_logs_best_score() {
+        // 1. 先にファイルパスをセット
+        set_task_file("test_best_score.json");
     
+        // 2. 仮タスクを作成
+        let tasks = vec![
+            Task {
+                id: 1,
+                title: "週報提出".to_string(),
+                done: false,
+                due_date: None,
+                priority: None,
+                status: TaskStatus::Pending,
+                visibility: Visibility::Normal,
+                notes: None,
+                tags: vec![],
+                subtasks: vec![],
+                extensions: Map::new(),
+            },
+            Task {
+                id: 2,
+                title: "資料作成".to_string(),
+                done: false,
+                due_date: None,
+                priority: None,
+                status: TaskStatus::Pending,
+                visibility: Visibility::Normal,
+                notes: None,
+                tags: vec![],
+                subtasks: vec![],
+                extensions: Map::new(),
+            },
+        ];
+    
+        // 3. そのファイルに保存
+        save_tasks_with_file(get_task_file(), &tasks);
+    
+        // 4. 類似度テスト
+        let found = find_task_id_by_similarity("週報出したよ", 0.7);
+        assert_eq!(found, Some(1));
+    
+        // 5. クリーンアップ
+        std::fs::remove_file("test_best_score.json").ok();
+    }
+}    
 }

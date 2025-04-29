@@ -1,5 +1,6 @@
 use crate::models::Task;
 use crate::models::ChatMessage;
+
 use crate::tts;
 use chrono::Local;
 use tokio::time::{sleep, Duration};
@@ -45,6 +46,9 @@ pub async fn timer() {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Map;
+    use crate::models::TaskStatus;
+    use crate::models::Visibility;
     use super::*;
     use crate::models::Task;
 
@@ -58,7 +62,19 @@ mod tests {
     #[tokio::test]
     async fn test_greeting_with_pending_tasks() {
         let tasks = vec![
-            Task { id: 1, title: "やること".into(), done: false }
+            Task {
+                id: 1,
+                title: "テストタスク".into(),
+                done: false,
+                due_date: None,
+                priority: None,
+                status: TaskStatus::NotStarted,
+                visibility: Visibility::Visible,
+                notes: None,
+                tags: vec![],
+                subtasks: vec![],
+                extensions: Map::new(),
+            }
         ];
         let message = make_greeting_message(&tasks);
         assert!(message.contains("現在 1 件のタスク"));

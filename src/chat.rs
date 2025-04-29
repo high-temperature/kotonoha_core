@@ -53,6 +53,34 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
     Ok(parsed.choices[0].message.content.trim().to_lowercase())
 }
 
+pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let prompt = format!(
+        "次のユーザーの発言がタスク操作だとしたら、操作の種類を一語で答えてください。「追加」「完了」「一覧」「なし」のいずれかで返答してください。\n\n入力: {}",
+        input
+    );
+
+    let req = ChatRequest {
+        model: "gpt-3.5-turbo".into(),
+        messages: vec![ChatMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    let resp = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key)
+        .json(&req)
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let parsed: ChatResponse = serde_json::from_str(&resp)?;
+    Ok(parsed.choices[0].message.content.trim().to_string())
+}
+
+
 pub fn detect_special_command(input: &str) -> Option<&'static str>{
     if input.contains("タスク一覧") || input.contains("タスク確認"){
         Some("list")

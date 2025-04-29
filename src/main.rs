@@ -1,7 +1,6 @@
 ﻿use kotonoha_core::*;
-use tts;
-use chat;
-use models::ChatMessage;
+use crate::{tasks, tts, chat, kotonoha};
+use crate::models::ChatMessage;
 
 use rand::Rng;
 
@@ -13,8 +12,7 @@ use reqwest::Client;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
-
-    // MOCK_TTS 環境変数がセットされていたらモックモードにする
+    
     if std::env::var("MOCK_TTS").is_ok() {
         tts::enable_mock_mode();
     }
@@ -22,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
 
-    // Kotonohaが定期的にしゃべる
+    // Kotonoha定時発話
     tokio::spawn(async {
         kotonoha::timer().await;
     });
@@ -34,17 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ChatMessage {
             role: "system".into(),
             content: chat::SYSTEM_PROMPT.into(),
-        },
-        ChatMessage {
-            role: "assistant".into(),
-            content: chat::FIRST_GREETING.into(),
         }
     ];
-    
 
     kotonoha::greeting(&mut messages).await?;
-
-
 
     loop {
         print!("あなた > ");
@@ -52,23 +43,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut user_input = String::new();
         io::stdin().read_line(&mut user_input)?;
         let user_input = user_input.trim();
-    
+
         if user_input == "exit" {
             break;
         }
-    
-        // ✅ 手動コマンド処理
+
+        // 直接コマンド
         if user_input.starts_with("todo ") {
             let task = user_input.strip_prefix("todo ").unwrap();
             tasks::add_task(task).await;
             continue;
         }
-    
         if user_input == "list" {
             tasks::list_tasks().await;
             continue;
         }
-    
         if user_input.starts_with("done ") {
             if let Ok(id) = user_input.strip_prefix("done ").unwrap().parse::<u32>() {
                 tasks::mark_done(id).await;
@@ -78,76 +67,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        if let Some(command) = chat::detect_special_command(user_input) {
-            match command {
-                "list" => {
-                    tasks::list_tasks().await;
-                    continue;
-                },
-                _ => {}
-            }
-        }
-        
-
+        // GPTで分類（タスク or 雑談）
         let mode = chat::classify_input(&client, &api_key, user_input).await?;
+
         match mode.as_str() {
             "タスク" => {
-                let task = chat::extract_task(&client, &api_key, user_input).await?;
-                if task.is_empty() || task == "なし" {
-                    tts::speak("タスクは見つかりませんでした。").await?;
-                } else {
-                    tasks::add_task(&task).await;
+                let intent = chat::classify_task_action(&client, &api_key, user_input).await?;
+                match intent.as_str() {
+                    "追加" => {
+                        let task = chat::extract_task(&client, &api_key, user_input).await?;
+                        if task.is_empty() || task == "なし" {
+                            tts::speak("追加タスクは見つかりませんでした。").await?;
+                        } else {
+                            tasks::add_task(&task).await;
+                        }
+                    }
+                    "完了" => {
+                        if let Some(task_id) = tasks::find_task_id_by_similarity(user_input, 0.85) {
+                            tasks::mark_done(task_id).await;
+                        } else {
+                            tts::speak("完了タスクが見つかりませんでした。").await?;
+                        }
+                    }
+                    "一覧" => {
+                        tasks::list_tasks().await;
+                    }
+                    "なし" | _ => {
+                        tts::speak("特別な操作はありません。").await?;
+                    }
                 }
-            },
-            "雑談" => {// タスク情報をサマリーする
-                let task_summary = tasks::summarize_tasks_for_prompt();
-                
-                // ユーザー発言＋タスク情報をまとめたメッセージをpush
+            }
+        ,
+            "雑談" => {
                 messages.push(ChatMessage {
                     role: "user".into(),
-                    content: format!(
-                        "【現在のタスク状況】\n{}\n\n【ユーザー発言】\n{}",
-                        task_summary,
-                        user_input
-                    ),
+                    content: user_input.to_string(),
                 });
-                
-                //  messages全体をChatGPTに渡す
+
                 let response = chat::respond_to_chat(&client, &api_key, &messages).await?;
-                
-                
-                // ランダムで励ましだけ or 励まし＋話題振りを決める
-                let mut rng = rand::rng();
-                let full_response = if rng.random_bool(0.7) {
-                    // 70%は普通に励ましだけ
-                    let encouragement = encourage::random_encouragement();
-                    format!("{}\n\n💬 {}", response, encouragement)
-                } else {
-                    // 30%は励まし＋話題振り
-                    let encouragement = encourage::random_encouragement();
-                    let topic = encourage::random_topic();
-                    format!("{}\n\n💬 {}\n💬 {}", response, encouragement, topic)
-                };
 
-           
-                //  Kotonohaが返事をする
-                println!("Kotonoha > {}", full_response);
-                tts::speak(&full_response).await?;
+                println!("Kotonoha > {}", response);
+                tts::speak(&response).await?;
 
-                // Assistantの応答も履歴にpush
                 messages.push(ChatMessage {
                     role: "assistant".into(),
-                    content:full_response,
+                    content: response,
                 });
-                
-                
-
-                
             },
             _ => {
-            tts::speak("分類に失敗しました。").await?;
+                tts::speak("分類に失敗しました。もう一度お願いします。").await?;
             }
-        }       
+        }
     }
 
     Ok(())
