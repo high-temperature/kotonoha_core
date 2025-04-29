@@ -76,6 +76,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
+        if let Some(command) = chat::detect_special_command(user_input) {
+            match command {
+                "list" => {
+                    tasks::list_tasks().await;
+                    continue;
+                },
+                _ => {}
+            }
+        }
+        
+
         let mode = chat::classify_input(&client, &api_key, user_input).await?;
         match mode.as_str() {
             "タスク" => {

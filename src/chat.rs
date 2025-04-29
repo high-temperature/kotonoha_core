@@ -53,6 +53,14 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
     Ok(parsed.choices[0].message.content.trim().to_lowercase())
 }
 
+pub fn detect_special_command(input: &str) -> Option<&'static str>{
+    if input.contains("タスク一覧") || input.contains("タスク確認"){
+        Some("list")
+    }else {
+        None
+    }
+}
+
 pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
     let prompt = format!(
         "以下の文から、やるべきタスクがあればタイトルだけを抽出してください。\n文:{}",
