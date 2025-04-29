@@ -17,8 +17,8 @@ fn test_cli_add_and_complete_task() {
 
     {
         let stdin = child.stdin.as_mut().expect("failed to open stdin");
-        writeln!(stdin, "todo 統合テストタスク").unwrap();
-        writeln!(stdin, "done 1").unwrap();
+        writeln!(stdin, "統合テストタスクをするの覚えておいて").unwrap();
+        writeln!(stdin, "統合テストタスクが完了しました。").unwrap();
         writeln!(stdin, "exit").unwrap(); // 明示的に終了
     }
 

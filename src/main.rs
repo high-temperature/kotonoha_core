@@ -2,8 +2,6 @@
 use crate::{tasks, tts, chat, kotonoha};
 use crate::models::ChatMessage;
 
-use rand::Rng;
-
 use dotenvy::dotenv;
 use std::env;
 use std::io::{self, Write};
@@ -44,27 +42,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         io::stdin().read_line(&mut user_input)?;
         let user_input = user_input.trim();
 
-        if user_input == "exit" {
-            break;
+        if user_input.is_empty() {
+            continue;
         }
 
-        // 直接コマンド
-        if user_input.starts_with("todo ") {
-            let task = user_input.strip_prefix("todo ").unwrap();
-            tasks::add_task(task).await;
-            continue;
-        }
-        if user_input == "list" {
-            tasks::list_tasks().await;
-            continue;
-        }
-        if user_input.starts_with("done ") {
-            if let Ok(id) = user_input.strip_prefix("done ").unwrap().parse::<u32>() {
-                tasks::mark_done(id).await;
-            } else {
-                println!("⚠️ IDが正しくありません。例: done 1");
-            }
-            continue;
+        if user_input == "exit" {
+            println!("Kotonoha> またお話ししましょうね。");
+            break;
         }
 
         // GPTで分類（タスク or 雑談）

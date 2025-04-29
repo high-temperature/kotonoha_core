@@ -1,5 +1,7 @@
 use crate::models::{ChatMessage, ChatRequest, ChatResponse};
+#[cfg(feature = "tts")]
 use reqwest::Client;
+
 use std::error::Error;
 
 pub const SYSTEM_PROMPT: &str = r#"
@@ -27,6 +29,7 @@ pub const FIRST_GREETING: &str = r#"
 
 
 
+#[cfg(feature = "tts")]
 pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
     let prompt = format!(
         "以下の文章はユーザからの入力です。この文章が「やるべきこと（ToDo）」に関する指示なら「タスク」、そうでなく会話や質問なら「雑談」とだけ返答してください。\n\n文章：{}",
@@ -53,6 +56,7 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
     Ok(parsed.choices[0].message.content.trim().to_lowercase())
 }
 
+#[cfg(feature = "tts")]
 pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn std::error::Error>> {
     let prompt = format!(
         "次のユーザーの発言がタスク操作だとしたら、操作の種類を一語で答えてください。「追加」「完了」「一覧」「なし」のいずれかで返答してください。\n\n入力: {}",
@@ -89,6 +93,7 @@ pub fn detect_special_command(input: &str) -> Option<&'static str>{
     }
 }
 
+#[cfg(feature = "tts")]
 pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
     let prompt = format!(
         "以下の文から、やるべきタスクがあればタイトルだけを抽出してください。\n文:{}",
@@ -115,6 +120,7 @@ pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result
     Ok(parsed.choices[0].message.content.trim().to_string())
 }
 
+#[cfg(feature = "tts")]
 pub async fn respond_to_chat(client: &Client, api_key: &str, messages: &Vec<ChatMessage>) -> Result<String, Box<dyn Error>> {
     let request = ChatRequest {
         model: "gpt-3.5-turbo".into(),

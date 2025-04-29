@@ -25,20 +25,20 @@ fn test_add_and_mark_task_flow() {
             subtasks: vec![],
             extensions: Map::new(),
         }];
-    tasks::save_tasks_with_file(TEST_FILE, &task_list);
+    tasks::save_tasks_with_file(std::path::Path::new(TEST_FILE), &task_list);
 
     // 2. 読み込んでチェック
-    let loaded = tasks::load_tasks_with_file(TEST_FILE);
+    let loaded = tasks::load_tasks_with_file(std::path::Path::new(TEST_FILE));
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].done, false);
 
     // 3. 完了にして保存
     let mut updated = loaded;
     updated[0].done = true;
-    tasks::save_tasks_with_file(TEST_FILE, &updated);
+    tasks::save_tasks_with_file(std::path::Path::new(TEST_FILE), &updated);
 
     // 4. 再ロードして完了確認
-    let confirmed = tasks::load_tasks_with_file(TEST_FILE);
+    let confirmed = tasks::load_tasks_with_file(std::path::Path::new(TEST_FILE));
     assert!(confirmed[0].done);
 
     std::fs::remove_file(TEST_FILE).ok();
@@ -92,9 +92,9 @@ fn test_multiple_tasks_add_and_check() {
             extensions: Map::new(),
         },
     ];
-    tasks::save_tasks_with_file(test_file, &tasks);
+    tasks::save_tasks_with_file(std::path::Path::new(test_file), &tasks);
 
-    let loaded = tasks::load_tasks_with_file(test_file);
+    let loaded = tasks::load_tasks_with_file(std::path::Path::new(test_file));
     assert_eq!(loaded.len(), 3);
     assert_eq!(loaded[0].title, "1つ目のテストタスク");
     assert!(loaded[2].done);

@@ -1,8 +1,14 @@
 // src/tts.rs
 
-use reqwest::Client;
+
+#[cfg(feature = "tts")]
 use rodio::{Decoder, OutputStream, Sink};
+
+#[cfg(feature = "tts")]
 use std::io::Cursor;
+
+#[cfg(feature = "tts")]
+use reqwest::Client;
 
 const KASUKABE_TSUMUGI_ID: &str = "8"; // 春日部つむぎのID
 
@@ -21,6 +27,7 @@ pub fn enable_mock_mode() {
     MOCK_MODE.store(true, Ordering::Relaxed);
 }
 
+#[cfg(feature = "tts")]
 pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
     if MOCK_MODE.load(Ordering::Relaxed) {
         // モックモードなら、VOICEVOXには繋がずプリントする
