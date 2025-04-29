@@ -113,15 +113,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 //  messages全体をChatGPTに渡す
                 let response = chat::respond_to_chat(&client, &api_key, &messages).await?;
                 
+                let encouragement = encourage::random_encouragement();
+                let full_response = format!("{}\n\n {}", response, encouragement);
+            
+                //  Kotonohaが返事をする
+                println!("Kotonoha > {}", full_response);
+                tts::speak(&full_response).await?;
+
                 // Assistantの応答も履歴にpush
                 messages.push(ChatMessage {
                     role: "assistant".into(),
-                    content: response.clone(),
+                    content:full_response,
                 });
                 
-                //  Kotonohaが返事する
-                println!("Kotonoha > {}", response);
-                tts::speak(&response).await?;
+                
+
                 
             },
             _ => {
