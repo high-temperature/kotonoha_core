@@ -164,5 +164,21 @@ fn test_mark_done_updates_task() {
     assert!(updated_task.done);
 }
 
+#[test]
+fn test_add_multiple_tasks_and_order() {
+    let _ = std::fs::remove_file(TEST_FILE);
+    let mut tasks = vec![];
+
+    tasks.push(Task { id: 1, title: "一件目".to_string(), done: false });
+    tasks.push(Task { id: 2, title: "二件目".to_string(), done: false });
+
+    save_tasks_with_file(TEST_FILE, &tasks);
+    let loaded = load_tasks_with_file(TEST_FILE);
+
+    assert_eq!(loaded.len(), 2);
+    assert_eq!(loaded[0].title, "一件目");
+    assert_eq!(loaded[1].title, "二件目");
+}
+
     
 }

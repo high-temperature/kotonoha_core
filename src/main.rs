@@ -1,5 +1,5 @@
 ﻿use kotonoha_core::*;
-
+use tts;
 use models::ChatMessage;
 
 use dotenvy::dotenv;
@@ -10,6 +10,12 @@ use reqwest::Client;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+
+    // MOCK_TTS 環境変数がセットされていたらモックモードにする
+    if std::env::var("MOCK_TTS").is_ok() {
+        tts::enable_mock_mode();
+    }
+
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
     let _messages:Vec<ChatMessage> = vec![];
