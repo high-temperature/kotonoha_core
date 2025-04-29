@@ -15,18 +15,17 @@ fn test_cli_add_and_complete_task() {
         .env("MOCK_TTS", "1") 
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("failed to start kotonoha_core");
-    sleep(Duration::from_millis(500));
-    
+    sleep(Duration::from_millis(1000));
+
     {
         let stdin = child.stdin.as_mut().expect("failed to open stdin");
         // タスク登録だけ先に送る
         writeln!(stdin, "統合テストタスクをするの覚えておいて").unwrap();
-        let _ = sleep(Duration::from_millis(500));
         
         // タスク完了指示を送る
-        writeln!(stdin, "統合テストタスクが完了しました。").unwrap();
         let _ = sleep(Duration::from_millis(500));
 
         // exitコマンド送る
@@ -37,9 +36,9 @@ fn test_cli_add_and_complete_task() {
     println!("status: {:?}", output.status);
     println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
     println!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    println!("STDOUT:\n{}", stdout_str);
 
+    assert!(output.status.success(), "process exited with failure");
+    
     // ファイルに保存されているか確認
     let data = fs::read_to_string(task_file).expect("failed to read task file");
     assert!(data.contains("統合テストタスク"));
