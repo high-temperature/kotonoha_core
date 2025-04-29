@@ -2,6 +2,9 @@ use std::process::{Command, Stdio};
 use std::io::Write;
 use std::fs;
 
+use std::time::Duration;
+use std::thread::sleep;
+
 #[test]
 fn test_cli_add_and_complete_task() {
     let task_file = "tasks_test_cli.json";
@@ -17,12 +20,22 @@ fn test_cli_add_and_complete_task() {
 
     {
         let stdin = child.stdin.as_mut().expect("failed to open stdin");
+        // タスク登録だけ先に送る
         writeln!(stdin, "統合テストタスクをするの覚えておいて").unwrap();
+        let _ = sleep(Duration::from_millis(500));
+        
+        // タスク完了指示を送る
         writeln!(stdin, "統合テストタスクが完了しました。").unwrap();
-        writeln!(stdin, "exit").unwrap(); // 明示的に終了
+        let _ = sleep(Duration::from_millis(500));
+
+        // exitコマンド送る
+        writeln!(stdin, "exit").unwrap();
     }
 
     let output = child.wait_with_output().expect("failed to read output");
+    println!("status: {:?}", output.status);
+    println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+    println!("stderr: {}", String::from_utf8_lossy(&output.stderr));
     let stdout_str = String::from_utf8_lossy(&output.stdout);
     println!("STDOUT:\n{}", stdout_str);
 
