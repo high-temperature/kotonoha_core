@@ -107,6 +107,7 @@ fn display_tasks(task: &Task, indent: usize) {
     }
 }
 
+
 pub fn find_task_id_by_similarity(input: &str, threshold: f64) -> Option<u32> {
     let tasks = load_tasks();
     let mut best_match = None;
@@ -115,8 +116,8 @@ pub fn find_task_id_by_similarity(input: &str, threshold: f64) -> Option<u32> {
     println!("🔍 入力: \"{}\"", input);
 
     for task in &tasks {
-        if let Some((id, score)) = find_best_match(task, input) {
-            println!("📝 タスク \"{}\" のスコア: {:.3}", task.title, score);
+        if let Some((id, title ,score)) = find_best_match(task, input) {
+            println!("📝 id\"{}\" タスク \"{}\" のスコア: {:.3}", id, title, score);
 
             if score > best_score {
                 best_match = Some(id);
@@ -134,23 +135,6 @@ pub fn find_task_id_by_similarity(input: &str, threshold: f64) -> Option<u32> {
         None
     }
 }
-
-fn find_best_match(task: &Task, input: &str) -> Option<(u32, f64)> {
-    let score = jaro_winkler(&task.title.to_lowercase(), &input.to_lowercase());
-
-    if !task.done {
-        return Some((task.id, score));
-    }
-
-    for sub in &task.subtasks {
-        if let Some((id, sub_score)) = find_best_match(sub, input) {
-            return Some((id, sub_score));
-        }
-    }
-
-    None
-}
-
 
 
 
@@ -185,6 +169,48 @@ fn find_in_subtasks(subtasks: &[Task], input: &str) -> Option<u32> {
     }
     None
 }
+
+fn find_best_match(task: &Task, input: &str) -> Option<(u32, String, f64)> {
+    let score = jaro_winkler(&task.title.to_lowercase(), &input.to_lowercase());
+
+    if !task.done {
+        return Some((task.id, task.title.clone(), score)); // ← ★ スコアも返す！
+    }
+
+    for sub in &task.subtasks {
+        if let Some((id, title, sub_score)) = find_best_match(sub, input) {
+            return Some((id, title, sub_score)); // ← ★ こっちも3つ返す！
+        }
+    }
+
+    None
+}
+
+pub fn find_task_with_score(input: &str, threshold: f64) -> Option<(u32, String, f64)> {
+    let tasks = load_tasks();
+    let mut best_match: Option<(u32, String, f64)> = None;
+    let mut best_score = 0.0;
+
+    for task in &tasks {
+        if let Some((id, title, score)) = find_best_match(task, input) {
+            if score > best_score {
+                best_match = Some((id, title, score));
+                best_score = score;
+            }
+        }
+    }
+
+    if let Some((id, title, score)) = &best_match {
+        if *score >= threshold {
+            return Some((id.clone(), title.clone(), *score));
+        }
+    }
+
+    None
+}
+
+
+
 
 
 fn mark_task_done(tasks: &mut [Task], task_id: u32) -> bool {
@@ -308,8 +334,8 @@ fn test_mark_done_updates_task() {
 #[test]
 
 fn test_add_multiple_tasks_and_order() {
-    let file = get_task_file();
-    let _ = std::fs::remove_file(file);
+    let test_file = "tasks_test_multiple.json";
+    let _ = std::fs::remove_file(test_file);
     let mut tasks = vec![];
 
     tasks.push(Task { 
@@ -340,19 +366,20 @@ fn test_add_multiple_tasks_and_order() {
         extensions: Map::new(),
     });
 
-    save_tasks_with_file(file, &tasks);
-    let loaded = load_tasks_with_file(file);
+    save_tasks_with_file(test_file, &tasks);
+    let loaded = load_tasks_with_file(test_file);
 
     assert_eq!(loaded.len(), 2);
     assert_eq!(loaded[0].title, "一件目");
     assert_eq!(loaded[1].title, "二件目");
+
+    let _ = std::fs::remove_file(test_file); // ✅ テスト後にお掃除
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::{Task, TaskStatus, Visibility};
-    use chrono::NaiveDate;
 
     fn dummy_task(id: u32, title: &str) -> Task {
         Task {
