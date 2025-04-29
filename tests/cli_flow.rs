@@ -17,7 +17,8 @@ fn test_cli_add_and_complete_task() {
         .stdout(Stdio::piped())
         .spawn()
         .expect("failed to start kotonoha_core");
-
+    sleep(Duration::from_millis(500));
+    
     {
         let stdin = child.stdin.as_mut().expect("failed to open stdin");
         // タスク登録だけ先に送る
