@@ -1,4 +1,5 @@
 use crate::models::{ChatMessage, ChatRequest, ChatResponse};
+
 #[cfg(feature = "tts")]
 use reqwest::Client;
 
@@ -31,6 +32,7 @@ pub const FIRST_GREETING: &str = r#"
 
 #[cfg(feature = "tts")]
 pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
+    
     let prompt = format!(
         "以下の文章はユーザからの入力です。この文章が「やるべきこと（ToDo）」に関する指示なら「タスク」、そうでなく会話や質問なら「雑談」とだけ返答してください。\n\n文章：{}",
         input
@@ -51,13 +53,29 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
         .send()
         .await?;
 
+    let status = response.status();
     let text = response.text().await?;
+    
+    if !status.is_success() {
+        return Err(format!("API Error {}: {}", status, text).into());
+       }
+
     let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_lowercase())
+    let content = parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| Box::<dyn Error>::from(format!("OpenAI: No choices found in the response: {}", text)))?
+        .message
+        .content
+        .trim()
+        .to_lowercase();
+
+    Ok(content)
 }
 
 #[cfg(feature = "tts")]
 pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn std::error::Error>> {
+
     let prompt = format!(
         "次のユーザーの発言がタスク操作だとしたら、操作の種類を一語で答えてください。「追加」「完了」「一覧」「なし」のいずれかで返答してください。\n\n入力: {}",
         input
@@ -76,12 +94,25 @@ pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -
         .bearer_auth(api_key)
         .json(&req)
         .send()
-        .await?
-        .text()
         .await?;
 
-    let parsed: ChatResponse = serde_json::from_str(&resp)?;
-    Ok(parsed.choices[0].message.content.trim().to_string())
+    let status = resp.status();
+    let body = resp.text().await?;
+    if !status.is_success() {
+        return Err(format!("API Error: ({}):{}", status, body).into());
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body)?;
+    Ok(parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| format!("OpenAI: No choices found in the response: {}", body))?
+        .message
+        .content
+        .trim()
+        .to_string()
+    )
+
 }
 
 
@@ -115,9 +146,22 @@ pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result
         .send()
         .await?;
 
-    let text = response.text().await?;
-    let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_string())
+    let status = response.status();
+    let body = response.text().await?;
+    if !status.is_success() {
+        return Err(format!("API Error: ({}):{}", status, body).into());
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body)?;
+    Ok(parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| format!("OpenAI: No choices found in the response: {}", body))?
+        .message
+        .content
+        .trim()
+        .to_string()
+    )
 }
 
 #[cfg(feature = "tts")]
@@ -134,9 +178,22 @@ pub async fn respond_to_chat(client: &Client, api_key: &str, messages: &Vec<Chat
         .send()
         .await?;
 
+    let status = response.status();
     let text = response.text().await?;
+
+    if !status.is_success() {
+            return Err(format!("API Error: ({}):{}", status, text).into());
+        }
+
     let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_string())
+    let reply = parsed.choices
+        .get(0)
+        .map(| choice | choice.message.content.clone())
+        .ok_or({
+            format!("No choices found in the response: {}", text)
+        })?;
+
+    Ok(reply.trim().to_string())
 }
 
 
