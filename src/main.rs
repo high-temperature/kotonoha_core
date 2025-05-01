@@ -9,17 +9,16 @@ use reqwest::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    dotenv().ok();
     
     if let Ok(file_path) = std::env::var("TASK_FILE") {
         kotonoha_core::tasks::set_task_file(&file_path);
     }
     
-    dotenv().ok();
-    
     if std::env::var("MOCK_TTS").is_ok() {
         tts::enable_mock_mode();
     }
-
   
     let api_key = env::var("OPENAI_API_KEY")?;
     let client = Client::new();
@@ -28,9 +27,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async {
         kotonoha::timer().await;
     });
-
-//    let task_file = env::var("TASK_FILE").unwrap_or_else(|_| "tasks.json".to_string());
-//    tasks::set_task_file(&task_file);
 
     let mut messages = vec![
         ChatMessage {

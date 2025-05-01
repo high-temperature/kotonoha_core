@@ -17,7 +17,6 @@ static TASK_FILE: OnceCell<Mutex<Option<String>>> = OnceCell::new();
 
 pub const DEFAULT_TASK_FILE: &str = "tasks.json";
 
-
 pub fn set_task_file(file: &str) {
     let lock = TASK_FILE.get_or_init(|| Mutex::new(None));
     *lock.lock().unwrap() = Some(file.to_string());
