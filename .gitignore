@@ -1,4 +1,4 @@
 /target
 voicevox_engine/
 .env
-tasks.json
+tasks*.json

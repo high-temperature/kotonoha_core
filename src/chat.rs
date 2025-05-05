@@ -1,8 +1,38 @@
 use crate::models::{ChatMessage, ChatRequest, ChatResponse};
+
+#[cfg(feature = "tts")]
 use reqwest::Client;
+
 use std::error::Error;
 
+pub const SYSTEM_PROMPT: &str = r#"
+あなたの名前は「ことのは」です。
+あなたはユーザー専属の秘書型AIとして動作します。
+
+【会話ルール】
+- 自分の名前は必ず「ことのは」と名乗ってください
+- ユーザーに対しては丁寧で親しみやすい口調で話します
+- 名前や役割を聞かれたときは「秘書のことのはです」と答えてください
+- 話し方は柔らかく、女性的な印象にしてください
+- ユーザーの感情に寄り添い、共感的に返答します
+
+【目的】
+- ユーザーのタスク管理をサポートする
+- ユーザーの生活や思考を整理する手助けをする
+- 必要に応じてタスクを提案する
+
+これからユーザーと会話を始めます。
+"#;
+
+pub const FIRST_GREETING: &str = r#"
+はじめまして、秘書のことのはです。
+今日もよろしくお願いしますね。 "#;
+
+
+
+#[cfg(feature = "tts")]
 pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
+    
     let prompt = format!(
         "以下の文章はユーザからの入力です。この文章が「やるべきこと（ToDo）」に関する指示なら「タスク」、そうでなく会話や質問なら「雑談」とだけ返答してください。\n\n文章：{}",
         input
@@ -23,11 +53,78 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
         .send()
         .await?;
 
+    let status = response.status();
     let text = response.text().await?;
+    
+    if !status.is_success() {
+        return Err(format!("API Error {}: {}", status, text).into());
+       }
+
     let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_lowercase())
+    let content = parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| Box::<dyn Error>::from(format!("OpenAI: No choices found in the response: {}", text)))?
+        .message
+        .content
+        .trim()
+        .to_lowercase();
+
+    Ok(content)
 }
 
+#[cfg(feature = "tts")]
+pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn std::error::Error>> {
+
+    let prompt = format!(
+        "次のユーザーの発言がタスク操作だとしたら、操作の種類を一語で答えてください。「追加」「完了」「一覧」「なし」のいずれかで返答してください。\n\n入力: {}",
+        input
+    );
+
+    let req = ChatRequest {
+        model: "gpt-3.5-turbo".into(),
+        messages: vec![ChatMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    let resp = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key)
+        .json(&req)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let body = resp.text().await?;
+    if !status.is_success() {
+        return Err(format!("API Error: ({}):{}", status, body).into());
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body)?;
+    Ok(parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| format!("OpenAI: No choices found in the response: {}", body))?
+        .message
+        .content
+        .trim()
+        .to_string()
+    )
+
+}
+
+
+pub fn detect_special_command(input: &str) -> Option<&'static str>{
+    if input.contains("タスク一覧") || input.contains("タスク確認"){
+        Some("list")
+    }else {
+        None
+    }
+}
+
+#[cfg(feature = "tts")]
 pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
     let prompt = format!(
         "以下の文から、やるべきタスクがあればタイトルだけを抽出してください。\n文:{}",
@@ -49,18 +146,29 @@ pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result
         .send()
         .await?;
 
-    let text = response.text().await?;
-    let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_string())
+    let status = response.status();
+    let body = response.text().await?;
+    if !status.is_success() {
+        return Err(format!("API Error: ({}):{}", status, body).into());
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body)?;
+    Ok(parsed
+        .choices
+        .get(0)
+        .ok_or_else(|| format!("OpenAI: No choices found in the response: {}", body))?
+        .message
+        .content
+        .trim()
+        .to_string()
+    )
 }
 
-pub async fn respond_to_chat(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
+#[cfg(feature = "tts")]
+pub async fn respond_to_chat(client: &Client, api_key: &str, messages: &Vec<ChatMessage>) -> Result<String, Box<dyn Error>> {
     let request = ChatRequest {
         model: "gpt-3.5-turbo".into(),
-        messages: vec![ChatMessage {
-            role: "user".into(),
-            content: input.to_string(),
-        }],
+        messages: messages.clone(),
     };
 
     let response = client
@@ -70,9 +178,22 @@ pub async fn respond_to_chat(client: &Client, api_key: &str, input: &str) -> Res
         .send()
         .await?;
 
+    let status = response.status();
     let text = response.text().await?;
+
+    if !status.is_success() {
+            return Err(format!("API Error: ({}):{}", status, text).into());
+        }
+
     let parsed: ChatResponse = serde_json::from_str(&text)?;
-    Ok(parsed.choices[0].message.content.trim().to_string())
+    let reply = parsed.choices
+        .get(0)
+        .map(| choice | choice.message.content.clone())
+        .ok_or({
+            format!("No choices found in the response: {}", text)
+        })?;
+
+    Ok(reply.trim().to_string())
 }
 
 
