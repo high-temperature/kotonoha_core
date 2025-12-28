@@ -56,7 +56,13 @@ pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
         .bytes()
         .await?;
 
-    let (_stream, handle) = OutputStream::try_default()?;
+    let (_stream, handle) = match OutputStream::try_default() {
+        Ok(stream) => stream,
+        Err(err) => {
+            eprintln!("[TTS WARNING] Audio output unavailable: {}", err);
+            return Ok(());
+        }
+    };
     let sink = Sink::try_new(&handle)?;
     let source = Decoder::new(Cursor::new(audio))?;
     sink.append(source);
@@ -64,4 +70,3 @@ pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
