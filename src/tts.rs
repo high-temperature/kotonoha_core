@@ -10,6 +10,7 @@ use std::io::Cursor;
 #[cfg(feature = "tts")]
 use reqwest::Client;
 
+#[cfg(feature = "tts")]
 const KASUKABE_TSUMUGI_ID: &str = "8"; // 春日部つむぎのID
 
 
@@ -25,6 +26,11 @@ static MOCK_MODE: Lazy<AtomicBool> = Lazy::new(|| {
 // これを main.rs から呼ぶ
 pub fn enable_mock_mode() {
     MOCK_MODE.store(true, Ordering::Relaxed);
+}
+
+#[cfg(not(feature = "tts"))]
+pub async fn speak(_text: &str) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
 }
 
 #[cfg(feature = "tts")]
@@ -64,4 +70,3 @@ pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

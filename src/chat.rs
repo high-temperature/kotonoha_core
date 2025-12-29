@@ -1,8 +1,8 @@
 use crate::models::{ChatMessage, ChatRequest, ChatResponse};
 
-#[cfg(feature = "tts")]
 use reqwest::Client;
 
+use std::env;
 use std::error::Error;
 
 pub const SYSTEM_PROMPT: &str = r#"
@@ -30,9 +30,32 @@ pub const FIRST_GREETING: &str = r#"
 
 
 
-#[cfg(feature = "tts")]
+fn mock_openai_enabled() -> bool {
+    env::var("MOCK_OPENAI").is_ok()
+}
+
+fn mock_task_title(input: &str) -> String {
+    if let Some(idx) = input.find("タスク") {
+        let end = idx + "タスク".len();
+        let prefix = &input[..end];
+        let start = prefix
+            .rfind(|c: char| c.is_whitespace() || ['、', '。', ',', '.', '！', '!', '?', '？'].contains(&c))
+            .map(|pos| pos + 1)
+            .unwrap_or(0);
+        return prefix[start..].to_string();
+    }
+
+    input.trim().to_string()
+}
+
 pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
-    
+    if mock_openai_enabled() {
+        if input.contains("タスク") || input.contains("やる") || input.contains("完了") {
+            return Ok("タスク".to_string());
+        }
+        return Ok("雑談".to_string());
+    }
+
     let prompt = format!(
         "以下の文章はユーザからの入力です。この文章が「やるべきこと（ToDo）」に関する指示なら「タスク」、そうでなく会話や質問なら「雑談」とだけ返答してください。\n\n文章：{}",
         input
@@ -73,8 +96,19 @@ pub async fn classify_input(client: &Client, api_key: &str, input: &str) -> Resu
     Ok(content)
 }
 
-#[cfg(feature = "tts")]
 pub async fn classify_task_action(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn std::error::Error>> {
+    if mock_openai_enabled() {
+        if input.contains("完了") {
+            return Ok("完了".to_string());
+        }
+        if input.contains("一覧") {
+            return Ok("一覧".to_string());
+        }
+        if input.contains("追加") || input.contains("覚えて") || input.contains("登録") {
+            return Ok("追加".to_string());
+        }
+        return Ok("なし".to_string());
+    }
 
     let prompt = format!(
         "次のユーザーの発言がタスク操作だとしたら、操作の種類を一語で答えてください。「追加」「完了」「一覧」「なし」のいずれかで返答してください。\n\n入力: {}",
@@ -124,8 +158,11 @@ pub fn detect_special_command(input: &str) -> Option<&'static str>{
     }
 }
 
-#[cfg(feature = "tts")]
 pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result<String, Box<dyn Error>> {
+    if mock_openai_enabled() {
+        return Ok(mock_task_title(input));
+    }
+
     let prompt = format!(
         "以下の文から、やるべきタスクがあればタイトルだけを抽出してください。\n文:{}",
         input
@@ -164,8 +201,11 @@ pub async fn extract_task(client: &Client, api_key: &str, input: &str) -> Result
     )
 }
 
-#[cfg(feature = "tts")]
 pub async fn respond_to_chat(client: &Client, api_key: &str, messages: &Vec<ChatMessage>) -> Result<String, Box<dyn Error>> {
+    if mock_openai_enabled() {
+        return Ok("はい、承知しました。".to_string());
+    }
+
     let request = ChatRequest {
         model: "gpt-3.5-turbo".into(),
         messages: messages.clone(),

@@ -20,7 +20,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tts::enable_mock_mode();
     }
   
-    let api_key = env::var("OPENAI_API_KEY")?;
+    let mock_openai = env::var("MOCK_OPENAI").is_ok();
+    let api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
+    if api_key.is_empty() && !mock_openai {
+        return Err("OPENAI_API_KEY is not set".into());
+    }
     let client = Client::new();
 
     // Kotonoha定時発話

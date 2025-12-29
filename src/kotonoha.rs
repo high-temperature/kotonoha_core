@@ -15,7 +15,6 @@ pub fn make_greeting_message(tasks: &[Task]) -> String {
         format!("おはようございます。現在 {} 件のタスクがあります。", pending_count)
     }
 }
-#[cfg(feature = "tts")]
 pub async fn greeting(messages:&mut Vec<ChatMessage>) -> Result<(), Box<dyn Error>> {
     let tasks = crate::tasks::load_tasks::<&str>(None);
     let greeting_text = make_greeting_message(&tasks);
@@ -31,7 +30,6 @@ pub async fn greeting(messages:&mut Vec<ChatMessage>) -> Result<(), Box<dyn Erro
 
 
 
-#[cfg(feature = "tts")]
 pub async fn timer() {
     loop {
         sleep(Duration::from_secs(300)).await;
