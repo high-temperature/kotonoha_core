@@ -14,6 +14,7 @@ fn test_cli_add_and_complete_task() {
     let mut child = Command::new("target/debug/kotonoha_core")
         .env("TASK_FILE", &task_file)
         .env("MOCK_TTS", "1")
+        .env("MOCK_OPENAI", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

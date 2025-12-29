@@ -15,13 +15,13 @@ rand = "0.9.1"
 strsim = "0.11"
 uuid = { version = "1.16.0", features = ["v4"] }
 
-# TTSを使うときだけ rodio, reqwest を使う
-reqwest = { version = "0.11", optional = true, features = ["json"] }
+# TTSを使うときだけ rodio を使う
+reqwest = { version = "0.11", features = ["json"] }
 rodio = { version = "0.17", optional = true }
 
 [features]
-default = ["tts"]
-tts = ["reqwest", "rodio"]
+default = []
+tts = ["rodio"]
 
 [[bin]]
 name = "kotonoha_core"
