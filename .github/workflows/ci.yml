@@ -26,4 +26,4 @@ jobs:
       run: cargo build --verbose --features tts
 
     - name: Run tests with TTS feature
-      run: cargo test --verbose --no-default-features
+      run: cargo test --verbose --features tts

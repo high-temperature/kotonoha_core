@@ -18,7 +18,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::env;
 
 static MOCK_MODE: Lazy<AtomicBool> = Lazy::new(|| {
-    AtomicBool::new(env::var("MOCK_TTS").is_ok())
+    AtomicBool::new(
+        env::var("MOCK_TTS").is_ok()
+            || env::var("CI").is_ok()
+            || env::var("GITHUB_ACTIONS").is_ok(),
+    )
 });
 
 
@@ -56,13 +60,7 @@ pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
         .bytes()
         .await?;
 
-    let (_stream, handle) = match OutputStream::try_default() {
-        Ok(stream) => stream,
-        Err(err) => {
-            eprintln!("[TTS WARNING] Audio output unavailable: {}", err);
-            return Ok(());
-        }
-    };
+    let (_stream, handle) = OutputStream::try_default()?;
     let sink = Sink::try_new(&handle)?;
     let source = Decoder::new(Cursor::new(audio))?;
     sink.append(source);
