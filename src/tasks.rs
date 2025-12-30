@@ -1,6 +1,5 @@
 use crate::models::{Task, TaskStatus, Visibility};
 
-#[cfg(feature = "tts")]
 use crate::tts;
 
 use std::fs::{File, OpenOptions};
@@ -70,7 +69,6 @@ pub fn save_tasks_with_file(path: &Path, tasks: &[Task]) {
 }
 
 
-#[cfg(feature = "tts")]
 pub async fn add_task(title: &str) {
     let mut tasks = load_tasks::<&str>(None);
     let new_id = tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
@@ -96,11 +94,9 @@ pub async fn add_task(title: &str) {
     let response = format!("タスクを「{}」を登録しました。", title);
     let _ = tts::speak(&response).await;
 }
-#[ cfg(feature = "tts")]
 pub async fn list_tasks() {
     list_tasks_in::<&str>(None).await;
 }  
-#[cfg(feature = "tts")]
 pub async fn list_tasks_in<P:AsRef<Path>>(path: Option<P>) {
     let tasks = load_tasks(path);
 
@@ -131,14 +127,12 @@ fn display_tasks(task: &Task, indent: usize) {
     }
 }
 
-#[cfg(feature = "tts")]
 pub async fn mark_done(task_id: u32)
 {
     mark_done_in::<&str>(None, task_id).await;
 }
 
 
-#[cfg(feature = "tts")]
 pub async fn mark_done_in<P:AsRef<Path>>(path: Option<P>, task_id: u32) {
     let mut tasks = load_tasks(path);
     if mark_task_done(&mut tasks, task_id) {
