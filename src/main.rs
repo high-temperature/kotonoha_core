@@ -2,6 +2,8 @@
 use crate::{tasks, tts, chat, kotonoha};
 use crate::models::ChatMessage;
 
+use kotonoha_core::speech::SpeechQueue;
+
 use dotenvy::dotenv;
 use std::env;
 use std::io;
@@ -22,6 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("MOCK_TTS").is_ok() {
         tts::enable_mock_mode();
     }
+
+    let speech = SpeechQueue::spawn(
+        Duration::from_secs(600),   // 独り言クールダウン
+        Duration::from_secs(300),   // ユーザー操作後抑制時間
+    );
   
     let mock_openai = env::var("MOCK_OPENAI").is_ok();
     let api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
@@ -39,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     kotonoha::greeting(&mut messages).await?;
+
 
     //stdin をイベント化
 
@@ -94,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "追加" => {
                                 let task = chat::extract_task(&client, &api_key, user_input).await?;
                                 if task.is_empty() || task == "なし" {
-                                    tts::speak("追加タスクは見つかりませんでした。").await?;
+                                    speech.say_alert("追加するタスクが見つかりませんでした。もう一度お願いします。").await;
                                 } else {
                                     tasks::add_task(&task).await;
                                 }
@@ -103,14 +111,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if let Some(task_id) = tasks::find_task_id_by_similarity(user_input, 0.85) {
                                     tasks::mark_done(task_id).await;
                                 } else {
-                                    tts::speak("完了タスクが見つかりませんでした。").await?;
+                                    speech.say_alert("完了タスクが見つかりませんでした。").await;
                                 }
                             }
                             "一覧" => {
                                 tasks::list_tasks().await;
                             }
                             "なし" | _ => {
-                                tts::speak("特別な操作はありません。").await?;
+                                speech.say_alert("特別な操作はありません。").await;
                             }
                         }
                     }
@@ -119,12 +127,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         messages.push(ChatMessage { role: "user".into(), content: user_input.to_string() });
                         let response = chat::respond_to_chat(&client, &api_key, &messages).await?;
                         println!("Kotonoha > {}", response);
-                        tts::speak(&response).await?;
+                        speech.say_user(&response).await;
                         messages.push(ChatMessage { role: "assistant".into(), content: response });
                     }
 
                     _ => {
-                        tts::speak("分類に失敗しました。もう一度お願いします。").await?;
+                        speech.say_alert("分類に失敗しました。もう一度お願いします。").await;
                     }
                 }
             }
