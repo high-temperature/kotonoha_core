@@ -10,7 +10,9 @@ use std::io;
 use reqwest::Client;
 
 use tokio::sync::mpsc;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, Instant};
+
+use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -67,8 +69,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // 時報
-
     let mut time_tick = time::interval(Duration::from_secs(300));
+
+    // ★期限チェック（まずは1時間に1回）
+    let mut due_tick = time::interval(Duration::from_secs(10));
+
+    // ★同じタスクを連呼しない（id -> 最後に通知した時刻）
+    let mut last_notified: HashMap<u32, Instant> = HashMap::new();
+    let notify_cooldown = Duration::from_secs(6 * 3600); // 同一タスクは6時間おき
+
 
     println!("Kotonoha> こんにちは。ご用件をどうぞ。終了するには 'exit'またはCtrl+C と入力してください。");
 
@@ -82,6 +91,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ = time_tick.tick() => {
                 kotonoha::announce_time_once().await;
             }
+
+            _ = due_tick.tick() => {
+                // 例：3日以内の期限を通知
+                let due_tasks = tasks::find_due_within_days(3);
+
+                for t in due_tasks {
+                    let now = Instant::now();
+                    let should_notify = match last_notified.get(&t.id) {
+                        Some(prev) => now.duration_since(*prev) >= notify_cooldown,
+                        None => true,
+                    };
+
+                    if should_notify {
+                        last_notified.insert(t.id, now);
+
+                        // due_date は Option<NaiveDate> なので unwrap は安全（find_due_within_days が Some のみ返す想定）
+                        let msg = format!("期限が近いタスクがあります：{}（期限: {}）", t.title, t.due_date.unwrap());
+                        speech.say_alert(msg).await;
+                    }
+                }
+            }
+
 
             Some(line) = rx.recv() => {
                 let user_input = line.trim();
