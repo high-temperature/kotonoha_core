@@ -28,6 +28,20 @@ pub fn enable_mock_mode() {
     MOCK_MODE.store(true, Ordering::Relaxed);
 }
 
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(test)]
+static SPOKEN: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+#[cfg(test)]
+pub fn take_spoken() -> Vec<String> {
+    let m = SPOKEN.get_or_init(|| Mutex::new(Vec::new()));
+    let mut v = m.lock().unwrap();
+    std::mem::take(&mut *v)
+}
+
+
 #[cfg(not(feature = "tts"))]
 pub async fn speak(_text: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
@@ -35,11 +49,20 @@ pub async fn speak(_text: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(feature = "tts")]
 pub async fn speak(text: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if MOCK_MODE.load(Ordering::Relaxed) {
-        // モックモードなら、VOICEVOXには繋がずプリントする
-        println!("[MOCK VOICE]: {}", text);
-        return Ok(());
+if MOCK_MODE.load(Ordering::Relaxed) {
+    // モックモードなら、VOICEVOXには繋がずプリントする
+    println!("[MOCK VOICE]: {}", text);
+
+    // ★テスト時だけ「喋った内容」を記録する
+    #[cfg(test)]
+    {
+        let m = SPOKEN.get_or_init(|| Mutex::new(Vec::new()));
+        m.lock().unwrap().push(text.to_string());
     }
+
+    return Ok(());
+}
+
 
     // 本物のVoiceVoxを呼ぶ処理
     let client = Client::new();
