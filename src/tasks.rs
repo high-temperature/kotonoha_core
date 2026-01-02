@@ -44,7 +44,11 @@ pub fn load_tasks_with_file(path: &Path) -> Vec<Task> {
 
     let file = File::open(path).expect("Failed to open tasks file");
     let reader = BufReader::new(file);
-    serde_json::from_reader(reader).unwrap_or_else(|_| vec![])
+    serde_json::from_reader(reader).unwrap_or_else(|e| {
+    eprintln!("Failed to parse tasks file: {} ({})", path.display(), e);
+    vec![]
+})
+
 }
 
 pub fn save_tasks<P: AsRef<Path>>(path: Option<P>, tasks: &[Task]) {
@@ -301,6 +305,33 @@ pub fn summarize_tasks_for_prompt() -> String {
         format!("現在の未完了タスク一覧:\n{}", list)
     }
 }
+
+use chrono::{Local, NaiveDate};
+/// 期限が within_days 日以内の未完了タスクを返す
+pub fn find_due_within_days(within_days: i64) -> Vec<Task> {
+    let today: NaiveDate = Local::now().date_naive();
+    let limit = today + chrono::Duration::days(within_days);
+
+    let tasks = load_tasks::<&str>(None);
+    let mut out = Vec::new();
+
+    fn walk(out: &mut Vec<Task>, tasks: &[Task], today: NaiveDate, limit: NaiveDate) {
+        for t in tasks {
+            if !t.done {
+                if let Some(due) = t.due_date {
+                    if due >= today && due <= limit {
+                        out.push(t.clone());
+                    }
+                }
+            }
+            walk(out, &t.subtasks, today, limit);
+        }
+    }
+
+    walk(&mut out, &tasks, today, limit);
+    out
+}
+
 
 #[cfg(test)]
 mod tests {
