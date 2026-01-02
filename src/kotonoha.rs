@@ -30,15 +30,20 @@ pub async fn greeting(messages:&mut Vec<ChatMessage>) -> Result<(), Box<dyn Erro
 
 
 
+pub async fn announce_time_once(){
+    let now = Local::now();
+    let time_str = now.format("%H時%M分").to_string();
+    let message = format!("ただいま、{}です。水分補給と休憩も忘れずに。", time_str);
+    let _ = tts::speak(&message).await;
+}
+
+// 既存函数：互換のため残す（中身をよびだすためだけに）
 pub async fn timer() {
     loop {
         sleep(Duration::from_secs(300)).await;
+        announce_time_once()
+            .await;
 
-        let now = Local::now();
-        let time_str = now.format("%H時%M分").to_string();
-        let message = format!("ただいま、{}です。水分補給と休憩も忘れずに。", time_str);
-
-        let _ = tts::speak(&message).await;
     }
 }
 
