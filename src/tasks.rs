@@ -28,6 +28,26 @@ fn get_task_file() -> String {
         .unwrap_or_else(|| DEFAULT_TASK_FILE.to_string())
 }
 
+/// タスクIDからタイトルを取得する（サブタスクも含めて探索）
+pub fn get_task_title(task_id: u32) -> Option<String> {
+    let tasks = load_tasks::<&str>(None);
+
+    fn walk(tasks: &[Task], task_id: u32) -> Option<String> {
+        for t in tasks {
+            if t.id == task_id {
+                return Some(t.title.clone());
+            }
+            if let Some(found) = walk(&t.subtasks, task_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    walk(&tasks, task_id)
+}
+
+
 pub fn load_tasks<P: AsRef<Path>>(path: Option<P>) -> Vec<Task> {
     let path = match path {
         Some(p) => p.as_ref().to_path_buf(),
@@ -332,6 +352,14 @@ pub fn find_due_within_days(within_days: i64) -> Vec<Task> {
     out
 }
 
+use std::sync::{OnceLock};
+
+fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -426,6 +454,9 @@ mod tests {
 
     #[test]
     fn test_add_multiple_tasks_and_order() {
+
+        let _g = test_lock();
+        
         let temp = TempTaskFile::new();
 
         let tasks = vec![
@@ -438,6 +469,50 @@ mod tests {
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].title, "一件目");
         assert_eq!(loaded[1].title, "二件目");
+    }
+
+    #[test]
+    fn test_get_task_title() {
+        let _g = test_lock();
+        
+        let temp = TempTaskFile::new();
+        set_task_file(temp.path());
+
+        let tasks = vec![
+            Task {
+                id: 1,
+                title: "親タスク".into(),
+                done: false,
+                due_date: None,
+                priority:None,
+                status: TaskStatus::Pending,
+                visibility: Visibility::Normal,
+                notes: None,
+                tags: vec![],
+                subtasks: vec![
+                    Task {
+                        id: 2,
+                        title: "子タスク".into(),
+                        done: false,
+                        due_date: None,
+                    priority:None,
+                    status: TaskStatus::Pending,
+                    visibility: Visibility::Normal,
+                    notes: None,
+                    tags: vec![],
+                    subtasks: vec![],
+                    extensions:serde_json::Map::new(),
+                    }
+                ],
+                extensions:serde_json::Map::new(),
+            }
+        ];
+
+        temp.save(&tasks);
+
+        assert_eq!(get_task_title(1), Some("親タスク".into()));
+        assert_eq!(get_task_title(2), Some("子タスク".into()));
+        assert_eq!(get_task_title(999), None);
     }
 
     mod similarity_tests {

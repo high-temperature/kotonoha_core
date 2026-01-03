@@ -78,6 +78,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_notified: HashMap<u32, Instant> = HashMap::new();
     let notify_cooldown = Duration::from_secs(6 * 3600); // 同一タスクは6時間おき
 
+    // 期限通知の「今やる？」待ち（タスクIDと期限日を保持）
+    let mut pending_due: Option<(u32, chrono::NaiveDate)> = None;
+
 
     println!("Kotonoha> こんにちは。ご用件をどうぞ。終了するには 'exit'またはCtrl+C と入力してください。");
 
@@ -88,11 +91,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
+
             _ = time_tick.tick() => {
                 kotonoha::announce_time_once().await;
             }
 
             _ = due_tick.tick() => {
+
+                if pending_due.is_some() {
+                    // 「今やる？」待ち中は新規通知しない
+                    continue;
+                }
                 // 例：3日以内の期限を通知
                 let due_tasks = tasks::find_due_within_days(3);
 
@@ -105,25 +114,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     if should_notify {
                         last_notified.insert(t.id, now);
-
                         // due_date は Option<NaiveDate> なので unwrap は安全（find_due_within_days が Some のみ返す想定）
-                        let msg = format!("期限が近いタスクがあります：{}（期限: {}）", t.title, t.due_date.unwrap());
+                        let due = t.due_date.unwrap();
+                        let msg = format!("期限が近いタスクがあります：{}（期限: {}）。いまやりますか？(yes/no)", t.title, due);
                         speech.say_alert(msg).await;
+                        pending_due = Some((t.id, due));
+
+                        // 今回は1件だけ通知して、あとは次のtickまで待つ
+                        break;
                     }
                 }
             }
 
 
             Some(line) = rx.recv() => {
-                let user_input = line.trim();
-                if user_input.is_empty() {
-                    continue;
-                }
-                if user_input == "exit" {
-                    println!("Kotonoha> 終了します。またお話ししましょうね！");
-                    break;
-                }
+                 let user_input = line.trim();
+                    if user_input.is_empty() {
+                        continue;
+                    }
+                    if user_input == "exit" {
+                        println!("Kotonoha> 終了します。またお話ししましょうね！");
+                        break;
+                    }
+                     // ★期限の「いまやる？」待ちがあるなら、それを最優先で処理
+                    let input = user_input.trim().to_lowercase();
 
+                    if let Some((task_id, _due)) = pending_due.clone() {
+                        let yes = matches!(input.as_str(), "yes" | "y" | "はい" | "やる" | "やります" | "今やる");
+                        let no  = matches!(input.as_str(), "no"  | "n" | "いいえ" | "やらない" | "やりません" | "あとで");
+
+                        if yes {
+                           if let Some(title) = tasks::get_task_title(task_id) {
+                                speech
+                                  .say_user(format!("了解です。『{}』を今やりましょう。", title))
+                                    .await;
+                            } else {
+                                speech.say_user("了解です。今やりましょう。".to_string()).await;
+                            }
+
+                            pending_due = None;
+                            continue;
+                        }
+
+                        if no {
+                            speech.say_user("わかりました。あとでリマインドしますね。".to_string()).await;
+                            pending_due = None;
+                            continue;
+                        }
+
+                        speech.say_alert("「yes」か「no」でお答えください。".to_string()).await;
+                        continue;
+                    }
                 //GPTで分類
                 let mode = chat::classify_input(&client, &api_key, user_input).await?;
                 match mode.as_str() {
